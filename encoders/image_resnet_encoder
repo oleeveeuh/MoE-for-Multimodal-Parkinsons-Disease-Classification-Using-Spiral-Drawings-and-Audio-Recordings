@@ -1,0 +1,92 @@
+import torch
+import torch.nn as nn
+import torchvision.models as models
+import torchvision.transforms as transforms
+from PIL import Image
+import os
+import pandas as pd
+from torch.utils.data import Dataset, DataLoader
+from torchvision.io import read_image
+from torchvision.models import resnet50, ResNet50_Weights
+import numpy as np
+import random
+
+
+class ResNetFeatureExtractor(nn.Module):
+    def __init__(self, output_dim=192, weights=ResNet50_Weights.DEFAULT):
+        super().__init__()
+        # Load pretrained ResNet-50
+        base_model = models.resnet50(weights=weights)
+        # Remove the classification head (keep up to avgpool)
+        self.backbone = nn.Sequential(*list(base_model.children())[:-1])  # [B, 2048, 1, 1]
+        self.pool = nn.AdaptiveAvgPool2d((1, 1))  # optional, usually already done
+        self.flatten = nn.Flatten()  # [B, 2048]
+        self.proj = nn.Linear(2048, output_dim)  # [B, output_dim]
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        x = self.backbone(x)
+        x = self.pool(x)
+        x = self.flatten(x)
+        x = self.proj(x)
+        return self.relu(x)  # final shape: [B, output_dim]
+
+class PreprocessedImageDataset(Dataset):
+    def __init__(self, dir1, dir2):
+        self.image_paths = []
+        for d in [dir1, dir2]:
+            self.image_paths += [
+                os.path.join(d, f)
+                for f in os.listdir(d)
+                if f.lower().endswith(('.png'))
+            ]
+
+    def __len__(self):
+        return len(self.image_paths)
+
+    def __getitem__(self, idx):
+        image = Image.open(self.image_paths[idx]).convert('RGB')
+        tensor = transforms.ToTensor()(image)
+
+        if 'H_' in self.image_paths[idx]:
+            label = torch.tensor(0)
+        else: label = torch.tensor(1)
+
+        return tensor, label
+        
+def set_seed(seed=42):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+set_seed()
+# Load model
+model = ResNetFeatureExtractor(output_dim=192)
+model.eval()
+
+# Load dataset
+dataset = PreprocessedImageDataset("./preprocessed_data/image/train","./augmented_data/image")
+dataloader = DataLoader(dataset, batch_size=32, num_workers=0)
+
+# Extract features
+all_features = []
+all_labels = []
+with torch.no_grad():
+    for imgs, labels in dataloader:
+        feats = model(imgs)
+        all_features.append(feats)
+        all_labels.append(labels)
+
+
+all_features = torch.cat(all_features, dim=0)  # [N, d_model]
+all_labels = torch.cat(all_labels, dim=0)      # [N]
+
+df = pd.DataFrame(all_features.cpu().numpy())
+labels_df = pd.DataFrame(all_labels.cpu().numpy())
+
+df.to_csv('./encoders/encoded/image/features192.csv', index=False)
+labels_df.to_csv('./encoders/encoded/image/labels192.csv', index=False)
