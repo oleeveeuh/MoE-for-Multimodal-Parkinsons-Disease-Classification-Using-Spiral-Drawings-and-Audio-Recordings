@@ -4,6 +4,7 @@ import torch
 from sklearn.model_selection import train_test_split, RandomizedSearchCV, KFold, StratifiedKFold
 import shutil
 
+
 #filter for only lines recording Static Spiral Test
 #remove Grip Angle, TestID
 
@@ -19,30 +20,35 @@ def trim_tabular(input_file, output_dir):
     """
     features = []
 
+
     with open(file_path, 'r') as file:
-        for line in file:
+        lines = file.readlines()
+
+    first_timestamp = int((lines[0].split(';'))[5])
+
+    for line in lines:
             # Strip whitespace and split by ';'
-            data = line.strip().split(';')
+        data = line.strip().split(';')
 
             # Check if Test ID is '0' before processing the line
-            test_id = data[6].strip()
-            if test_id != '0':
-                continue  # Skip this line if Test ID is not 0
+        test_id = data[6].strip()
+        if test_id != '0':
+            continue  # Skip this line if Test ID is not 0
 
             # Parse values from the line
-            x = int(data[0].strip())   # X coordinate
-            y = int(data[1].strip())   # Y coordinate
-            z = int(data[2].strip())   # Z coordinate
-            pressure = int(data[3].strip())  # Pressure
-            grip_angle = int(data[4].strip())  # GripAngle (not used in calculations here)
-            timestamp = int(data[5].strip())  # Timestamp
+        x = int(data[0].strip())   # X coordinate
+        y = int(data[1].strip())   # Y coordinate
+        z = int(data[2].strip())   # Z coordinate
+        pressure = int(data[3].strip())  # Pressure
+        grip_angle = int(data[4].strip())  # GripAngle (not used in calculations here)
+        timestamp = int(data[5].strip()) - first_timestamp # Timestamp
 
-            features.append([x, y, z, pressure, timestamp])
+        features.append([x, y, z, pressure, timestamp])
 
-        features = torch.tensor(features, dtype=torch.float32)
-        np.savetxt(output_dir, features, delimiter=';', fmt='%.4f')
+    features = torch.tensor(features, dtype=torch.float32)
+    np.savetxt(output_dir, features, delimiter=';', fmt='%.4f')
 
-        print(f"Trimmed successfully, results located at: {output_dir}")
+    print(f"Trimmed successfully, results located at: {output_dir}")
 
 
 processed_txt = []

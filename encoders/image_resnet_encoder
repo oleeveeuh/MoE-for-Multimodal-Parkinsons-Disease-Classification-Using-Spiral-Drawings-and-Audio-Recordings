@@ -62,14 +62,15 @@ def set_seed(seed=42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-
 set_seed()
 # Load model
 model = ResNetFeatureExtractor(output_dim=192)
 model.eval()
 
 # Load dataset
-dataset = PreprocessedImageDataset("./preprocessed_data/image/train","./augmented_data/image")
+# dataset = PreprocessedImageDataset("./preprocessed_data/image/train","./augmented_data/image")
+dataset = PreprocessedImageDataset("./preprocessed_data/image/test",None)
+
 dataloader = DataLoader(dataset, batch_size=32, num_workers=0)
 
 # Extract features
@@ -88,5 +89,5 @@ all_labels = torch.cat(all_labels, dim=0)      # [N]
 df = pd.DataFrame(all_features.cpu().numpy())
 labels_df = pd.DataFrame(all_labels.cpu().numpy())
 
-df.to_csv('./encoders/encoded/image/features192.csv', index=False)
-labels_df.to_csv('./encoders/encoded/image/labels192.csv', index=False)
+df.to_csv('./encoders/encoded/image/testfeatures.csv', index=False)
+labels_df.to_csv('./encoders/encoded/image/testlabels.csv', index=False)

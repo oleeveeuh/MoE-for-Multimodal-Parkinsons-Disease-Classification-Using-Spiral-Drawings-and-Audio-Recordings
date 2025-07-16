@@ -6,13 +6,11 @@ from tqdm import tqdm
 import pandas as pd
 from torch.nn.utils.rnn import pad_sequence
 import os
-import random
 import torch.optim as optim
+import random
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
-
-os.environ["OMP_NUM_THREADS"] = "2"
-os.environ["MKL_NUM_THREADS"] = "2"
-torch.set_num_threads(2)
+from sklearn.model_selection import train_test_split
+import torch.nn.functional as F
 
 seed = 42  # or any integer
 torch.manual_seed(seed)
@@ -108,45 +106,69 @@ class AttentionPooling(nn.Module):
         x: [B, T, D]
         mask: [B, T] -> 1 for valid, 0 for padding
         """
-        attn_weights = self.attn(x).squeeze(-1)  # [B, T]
-        
-        if mask is not None:
-            # Set attention score of padded positions to -inf
-            attn_weights[~mask.bool()] = float('-inf')
-        
-        attn_weights = torch.softmax(attn_weights, dim=1)  # [B, T]
-        pooled = (x * attn_weights.unsqueeze(-1)).sum(dim=1)  # [B, D]
+        logits = self.attn(x).squeeze(-1)  # shape: [batch_size, seq_len]
+
+        # Mask invalid positions with a large negative number
+        logits = logits.masked_fill(mask == 0, -1e9)
+
+        # Numerical stability
+        logits = logits - logits.max(dim=1, keepdim=True)[0]  # subtract max
+        weights = F.softmax(logits, dim=1)                    # shape: [batch_size, seq_len]
+
+        # Apply attention weights
+        pooled = torch.bmm(weights.unsqueeze(1), x).squeeze(1)  # shape: [batch_size, d_model]
+
+        # Final safety check (optional)
+        pooled = torch.nan_to_num(pooled, nan=0.0, posinf=1e4, neginf=-1e4)
         return pooled
 
 class TabularTransformer(nn.Module):
-    def __init__(self, input_dim, d_model=128, nhead=4, num_layers=2, dropout=0.1):
+    def __init__(self, input_dim, d_model=192, nhead=4, num_layers=2, dropout=0.3):
         super().__init__()
         self.input_proj = nn.Linear(input_dim, d_model)
         self.pos_encoder = PositionalEncoding(d_model)
 
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=nhead, dropout=dropout, batch_first=True
-        )
-        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.encoder_layers = nn.ModuleList([
+            SoftMaskedSelfAttention(d_model, nhead) for _ in range(num_layers)
+        ])
+
         self.pool = AttentionPooling(d_model)
 
     def forward(self, x, mask=None):
-        """
-        x: [batch_size, seq_len, input_dim]
-        mask: [batch_size, seq_len], 1 for valid, 0 for padded
-        """
-        x = self.input_proj(x)                      # [B, T, D]
-        x = self.pos_encoder(x)                     # add positional encoding
+        x = self.input_proj(x)
+        x = self.pos_encoder(x)
 
-        if mask is not None:
-            transformer_mask = ~mask.bool()         # Transformer expects True for PAD
-        else:
-            transformer_mask = None
+        for layer in self.encoder_layers:
+            x = layer(x, soft_mask=mask)
 
-        x = self.transformer_encoder(x, src_key_padding_mask=transformer_mask)  # [B, T, D]
-        pooled = self.pool(x, mask)                 # [B, D]
+        pooled = self.pool(x, mask)
         return pooled
 
+class SoftMaskedSelfAttention(nn.Module):
+    def __init__(self, d_model, nhead):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(embed_dim=d_model, num_heads=nhead, batch_first=True)
+        self.norm = nn.LayerNorm(d_model)
+        self.ff = nn.Sequential(
+            nn.Linear(d_model, d_model * 4),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(d_model * 4, d_model),
+        )
+
+    def forward(self, x, soft_mask=None):
+        # x: [B, T, D]
+        attn_output, _ = self.attn(x, x, x)  # no hard key_padding_mask
+
+        if soft_mask is not None:
+            # Apply soft weights after attention — shape: [B, T, 1]
+            soft_mask = soft_mask.unsqueeze(-1)
+            attn_output = attn_output * soft_mask  # softly damp irrelevant positions
+
+        x = self.norm(x + attn_output)
+        x = self.norm(x + self.ff(x))
+        return x
+        
 class TabularTransformerWithClassifier(nn.Module):
     def __init__(self, encoder, d_model, num_classes):
         super().__init__()
@@ -170,6 +192,7 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
         loss = criterion(outputs, y_batch)
         loss.backward()
         optimizer.step()
+        torch.cuda.empty_cache()
 
         losses.append(loss.item())
         preds = outputs.argmax(dim=1).cpu().numpy()
@@ -199,10 +222,12 @@ def eval_epoch(model, dataloader, criterion, device):
     precision, recall, f1, _ = precision_recall_fscore_support(all_labels, all_preds, average='weighted')
     return sum(losses)/len(losses), acc, precision, recall, f1
 
-def train_model(encoder, train_loader, val_loader, d_model=192, num_classes=2, epochs=10, lr=1e-4, device='cuda'):
+
+
+def train_model(encoder, train_loader, val_loader, d_model=192, num_classes=2, epochs=8, lr=1e-3, device='cuda'):
     model = TabularTransformerWithClassifier(encoder, d_model, num_classes).to(device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
 
     for epoch in range(1, epochs+1):
         train_loss, train_acc, train_prec, train_rec, train_f1 = train_epoch(model, train_loader, criterion, optimizer, device)
@@ -217,35 +242,32 @@ def train_model(encoder, train_loader, val_loader, d_model=192, num_classes=2, e
 
 
 batch_size = 16
-d_model = 192  
+d_model = 192
 
 # model = TabularTransformer(input_dim=5, d_model=d_model)
 # model.eval().to(device)  # Move to GPU if available
-
-file_pairs = collect_data_and_masks("./preprocessed_data/tabular/train", "./augmented_data/tabular")
-
-
-from sklearn.model_selection import train_test_split
 
 # Collect all data file pairs
 file_pairs = collect_data_and_masks("./preprocessed_data/tabular/train", "./augmented_data/tabular")
 
 # Split into train and val (e.g., 80% train, 20% val)
-train_pairs, val_pairs = train_test_split(file_pairs, test_size=0.2, random_state=42, shuffle=True)
+train_pairs, val_pairs = train_test_split(file_pairs, test_size=0.3, random_state=42, shuffle=True)
 
 # Create Dataset objects
 train_dataset = SpiralDataset(train_pairs)
 val_dataset = SpiralDataset(val_pairs)
 
+
 # Create DataLoaders
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=spiral_collate_fn)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=spiral_collate_fn)
+train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, collate_fn=spiral_collate_fn)
+val_loader = DataLoader(val_dataset, batch_size=8, shuffle=False, collate_fn=spiral_collate_fn)
 
 encoder = TabularTransformer(input_dim=5, d_model=d_model)
 trained_model = train_model(encoder, train_loader, val_loader, d_model=d_model, num_classes=2, epochs=8, device=device)
 
 del train_loader
 del val_loader
+torch.cuda.empty_cache()
 print("training complete!")
 
 
@@ -256,10 +278,10 @@ all_labels = []
 dataset = SpiralDataset(file_pairs)
 dataloader = DataLoader(
     dataset,
-    batch_size=32,
+    batch_size=batch_size,
     shuffle=True,
     collate_fn=spiral_collate_fn,
-    num_workers=0
+    num_workers=4
 )
 
 with torch.no_grad():
@@ -268,7 +290,7 @@ with torch.no_grad():
         spiral_seq = spiral_seq.to(device)
         mask = mask.to(device)
 
-        features = train_model.encoder(spiral_seq, mask=mask)  # [B, d_model]
+        features = trained_model.encoder(spiral_seq, mask=mask)  # [B, d_model]
 
         all_features.append(features.cpu())
         all_labels.append(labels)
@@ -283,5 +305,4 @@ df.to_csv('./encoders/encoded/tabular/featurestest.csv', index=False)
 labels_df.to_csv('./encoders/encoded/tabular/labelstest.csv', index=False)
 
 
-print("✅ Feature saving complete!")
-
+print("Feature saving complete!")
