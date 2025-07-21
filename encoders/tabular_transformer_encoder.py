@@ -31,7 +31,7 @@ def collect_data_and_masks(original_dir, augmented_dir):
 
     # Augmented: has masks
     for fname in os.listdir(augmented_dir):
-        if fname.startswith('mix'):
+        if fname.startswith('mix_'):
             data_path = os.path.join(augmented_dir, fname)
             mask_path = data_path.replace('mix', 'mask')
 
@@ -244,36 +244,32 @@ def train_model(encoder, train_loader, val_loader, d_model=192, num_classes=2, e
 batch_size = 16
 d_model = 192
 
-# model = TabularTransformer(input_dim=5, d_model=d_model)
-# model.eval().to(device)  # Move to GPU if available
 
 # Collect all data file pairs
 file_pairs = collect_data_and_masks("./preprocessed_data/tabular/train", "./augmented_data/tabular")
 
-# Split into train and val (e.g., 80% train, 20% val)
-train_pairs, val_pairs = train_test_split(file_pairs, test_size=0.3, random_state=42, shuffle=True)
+# train_pairs, val_pairs = train_test_split(file_pairs, test_size=0.3, random_state=42, shuffle=True)
 
-# Create Dataset objects
-train_dataset = SpiralDataset(train_pairs)
-val_dataset = SpiralDataset(val_pairs)
+# train_dataset = SpiralDataset(train_pairs)
+# val_dataset = SpiralDataset(val_pairs)
 
+# train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, collate_fn=spiral_collate_fn)
+# val_loader = DataLoader(val_dataset, batch_size=8, shuffle=False, collate_fn=spiral_collate_fn)
 
-# Create DataLoaders
-train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, collate_fn=spiral_collate_fn)
-val_loader = DataLoader(val_dataset, batch_size=8, shuffle=False, collate_fn=spiral_collate_fn)
+# encoder = TabularTransformer(input_dim=5, d_model=d_model)
+# trained_model = train_model(encoder, train_loader, val_loader, d_model=d_model, num_classes=2, epochs=8, device=device)
 
-encoder = TabularTransformer(input_dim=5, d_model=d_model)
-trained_model = train_model(encoder, train_loader, val_loader, d_model=d_model, num_classes=2, epochs=8, device=device)
-
-del train_loader
-del val_loader
-torch.cuda.empty_cache()
-print("training complete!")
+# del train_loader
+# del val_loader
+# torch.cuda.empty_cache()
+# print("training complete!")
 
 
 all_features = []
 all_labels = []
 
+model = TabularTransformer(input_dim=5, d_model=d_model)
+model.eval().to(device)  # Move to GPU if available
 
 dataset = SpiralDataset(file_pairs)
 dataloader = DataLoader(
@@ -281,7 +277,7 @@ dataloader = DataLoader(
     batch_size=batch_size,
     shuffle=True,
     collate_fn=spiral_collate_fn,
-    num_workers=4
+    num_workers=0
 )
 
 with torch.no_grad():
@@ -290,7 +286,8 @@ with torch.no_grad():
         spiral_seq = spiral_seq.to(device)
         mask = mask.to(device)
 
-        features = trained_model.encoder(spiral_seq, mask=mask)  # [B, d_model]
+        # features = trained_model.encoder(spiral_seq, mask=mask)  # [B, d_model]
+        features = model(spiral_seq, mask=mask)  # [B, d_model]
 
         all_features.append(features.cpu())
         all_labels.append(labels)
@@ -301,8 +298,8 @@ all_labels = torch.cat(all_labels, dim=0)      # [N]
 df = pd.DataFrame(all_features.cpu().numpy())
 labels_df = pd.DataFrame(all_labels.cpu().numpy())
 
-df.to_csv('./encoders/encoded/tabular/featurestest.csv', index=False)
-labels_df.to_csv('./encoders/encoded/tabular/labelstest.csv', index=False)
+df.to_csv('./encoders/encoded/tabular/untrained_features.csv', index=False)
+labels_df.to_csv('./encoders/encoded/tabular/untrained_labelstest.csv', index=False)
 
 
 print("Feature saving complete!")
