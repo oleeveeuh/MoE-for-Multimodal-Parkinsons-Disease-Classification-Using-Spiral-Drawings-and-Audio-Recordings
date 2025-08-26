@@ -56,7 +56,7 @@ def apply_random_augmentations(img, n):
 
 # Paths
 input_dir = './preprocessed_data/image/train/'
-output_dir = './augmented_data/image/geometric'
+output_dir = './augmented_data/image/geometric2'
 os.makedirs(output_dir, exist_ok=True)
 clear_directory(output_dir)
 
@@ -69,7 +69,7 @@ for fname in os.listdir(input_dir):
     img_path = os.path.join(input_dir, fname)
     img = Image.open(img_path).convert('RGB')
 
-    for n in [1, 2, 3]:
+    for n in [1, 2]:
         aug_img = apply_random_augmentations(img.copy(), n)
         save_name = f"{os.path.splitext(fname)[0]}_aug{n}.png"
         F.to_pil_image(transforms.ToTensor()(aug_img)).save(os.path.join(output_dir, save_name))

@@ -13,6 +13,7 @@ import argparse
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, accuracy_score, precision_recall_fscore_support
 from itertools import product
 import random
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 seed = 42  
 torch.manual_seed(seed)
@@ -24,7 +25,7 @@ np.random.seed(seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 datasets = [
-    # 'tabular',
+    'tabular',
     'image',
     'audio',
 ]
@@ -65,8 +66,23 @@ def evaluate_metrics(model, dataloader, device):
     acc = accuracy_score(y_true, y_pred)
     precision, recall, f1, _ = precision_recall_fscore_support(y_true, y_pred, average='weighted')
 
-    print(f"✅ Accuracy: {acc:.4f} | Precision: {precision:.4f} | Recall: {recall:.4f} | F1 Score: {f1:.4f}")
+    print(f"Accuracy: {acc:.4f} | Precision: {precision:.4f} | Recall: {recall:.4f} | F1 Score: {f1:.4f}")
     return acc, precision, recall, f1
+
+# Get all predictions and true labels on test set
+def get_preds_and_labels(model, dataloader, device):
+    model.eval()
+    all_preds = []
+    all_labels = []
+    with torch.no_grad():
+        for x, y, _ in dataloader:
+            x = x.to(device)
+            logits, _ = model(x)
+            preds = torch.argmax(logits, dim=1)
+            all_preds.append(preds.cpu())
+            all_labels.append(y)
+    return torch.cat(all_preds).numpy(), torch.cat(all_labels).numpy()
+
 
 class MoELayer(nn.Module):
     def __init__(self, input_dim, expert_dim, num_experts, k=1, gate_noise_std=1.0):
@@ -149,6 +165,8 @@ def train(model, dataloader, optimizer, criterion, device):
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
+
+
     return total_loss / len(dataloader)
 
 def evaluate_with_expert_tracking(model, dataloader, device):
@@ -192,14 +210,10 @@ criterion = nn.CrossEntropyLoss()
 
    
 for d in datasets:
-    feat_path = f"./encoders/encoded/{d}/train_features.csv"
-    label_path = f"./encoders/encoded/{d}/train_labels.csv"
-    test_feat_path = f"./encoders/encoded/{d}/test_features.csv"
-    test_label_path = f"./encoders/encoded/{d}/test_labels.csv"
-    # feat_path = f"./encoders/encoded/{d}/train_resnet_geoaug_features.csv"
-    # label_path = f"./encoders/encoded/{d}/train_resnet_geoaug_labels.csv"
-    # test_feat_path = f"./encoders/encoded/{d}/test_resnet_features.csv"
-    # test_label_path = f"./encoders/encoded/{d}/test_resnet_labels.csv"
+    feat_path = f"./encoders/encoded/best/{d}/train_features.csv"
+    label_path = f"./encoders/encoded/best/{d}/train_labels.csv"
+    test_feat_path = f"./encoders/encoded/best/{d}/test_features.csv"
+    test_label_path = f"./encoders/encoded/best/{d}/test_labels.csv"
 
     X, y = load_csv_features_and_labels(feat_path, label_path)
     all_features.append(X)
@@ -219,8 +233,9 @@ X_test = torch.cat(test_features, dim=0)
 y_test = torch.cat(test_labels, dim=0)
 source_ids = torch.tensor(all_sources)
 test_source_ids = torch.tensor(test_sources)
-num_experts_list = [2, 3, 5]
-k_list = [1, 2, 3]
+num_experts_list = [1]
+k_list = [1]
+patience = 5
 
 # Create dataset with source tracking
 full_dataset = TensorDataset(X_all, y_all, source_ids)
@@ -229,13 +244,21 @@ test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16)
 
 kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
+# plot training loss
+
+
 for num_experts, k in product(num_experts_list, k_list):
     print(f"\n🧪 Testing num_experts = {num_experts}, k = {k}")
- 
+    all_results = []
+    best_model = None
+    best_acc = 0
+
+
     if k > num_experts:
         continue
 
     for fold, (train_idx, val_idx) in enumerate(kf.split(X_all, y_all)):
+        patience_counter = 0
         print(f"\nFold {fold + 1}/{5}")
 
         train_dataset = Subset(full_dataset, train_idx)
@@ -257,13 +280,23 @@ for num_experts, k in product(num_experts_list, k_list):
 
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
-        for epoch in range(256):
-            loss = train(model, train_loader, optimizer, criterion, device)
+        for epoch in range(200):
+            train_loss = train(model, train_loader, optimizer, criterion, device)
             # print(f"Fold {fold+1}, Epoch {epoch+1}: Loss = {loss:.4f}")
 
         # Evaluate metrics
         print(f"📊 Metrics for Fold {fold+1}:")
         acc, precision, recall, f1 = evaluate_metrics(model, val_loader, device)
+
+        if acc > best_acc:
+            best_acc = acc
+            patience_counter = 0
+            torch.save(model.state_dict(), 'best_model.pt')  # Save best model
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                print("Early stopping triggered.")
+                break
 
         all_results.append([acc, precision, recall, f1])
         # expert_usage = evaluate_with_expert_tracking(model, test_loader, device)
@@ -274,4 +307,17 @@ for num_experts, k in product(num_experts_list, k_list):
 
     print(f"Accuracy:{mean_metrics[0]:.4f}, Precision:{mean_metrics[1]:.4f}, Recall:{mean_metrics[2]:.4f}, F1:{mean_metrics[3]:.4f}")
 
-    
+    model.load_state_dict(torch.load('best_model.pt'))
+
+    print("📊 Evaluating on TEST set:")
+    test_acc, test_precision, test_recall, test_f1 = evaluate_metrics(model, test_loader, device)
+
+    # Get preds and true labels
+    test_preds, test_labels = get_preds_and_labels(model, test_loader, device)
+
+    # Compute confusion matrix
+    cm = confusion_matrix(test_labels, test_preds)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+    disp.plot(cmap=plt.cm.Blues)
+    plt.title("Confusion Matrix on Test Set")
+    plt.show()

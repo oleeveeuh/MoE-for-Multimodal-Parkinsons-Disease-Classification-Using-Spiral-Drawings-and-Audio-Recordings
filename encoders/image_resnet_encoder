@@ -118,8 +118,10 @@ model.eval()
 # Load dataset
 datasets = {
     # "train_resnet_mixup" : PreprocessedImageDataset("./preprocessed_data/image/train","./augmented_data/image/"),
-    "train_resnet_geoaug" : PreprocessedImageDataset("./preprocessed_data/image/train","./augmented_data/image/geometric"),
-    "test_resnet" : PreprocessedImageDataset("./preprocessed_data/image/test",None)
+    # "train_geoaug" : PreprocessedImageDataset("./preprocessed_data/image/train","./augmented_data/image/geometric2"),
+    # "test_resnet" : PreprocessedImageDataset("./preprocessed_data/image/test",None)
+    "train_mixup" : PreprocessedImageDataset("./preprocessed_data/image/train","./augmented_data/image/mixup2"),
+
 }
 
 
@@ -149,6 +151,13 @@ for key in datasets:
     df = pd.DataFrame(all_features.cpu().numpy())
     labels_df = pd.DataFrame(all_labels.cpu().numpy())
 
-    df.to_csv(f'./encoders/encoded/image/{key}_features.csv', index=False)
-    labels_df.to_csv(f'./encoders/encoded/image/{key}_labels.csv', index=False)
+
+    csv_path = (f'./encoders/encoded/image/{key}_features2.csv')
+    label_csv_path = (f'./encoders/encoded/image/{key}_labels2.csv')
+
+    if os.path.exists(csv_path):
+        open(csv_path, 'w').close()
+        
+    df.to_csv(csv_path, index=False)
+    labels_df.to_csv(label_csv_path, index=False)
 

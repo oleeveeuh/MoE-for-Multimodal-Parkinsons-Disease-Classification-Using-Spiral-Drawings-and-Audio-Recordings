@@ -33,7 +33,8 @@ def perform_mixup_on_random_files(directory, alpha=1.0):
     '''Select two random files from the directory and perform Mixup on their data'''
     # List all files in the directory
     files = os.listdir(directory)
-    save_dir = "./augmented_data/image"
+    save_dir = "./augmented_data/image/mixup4"
+    os.makedirs(save_dir, exist_ok=True)  
 
     mixed_x = []
     # Select two random files
@@ -42,7 +43,7 @@ def perform_mixup_on_random_files(directory, alpha=1.0):
     if file1[0] != file2[0]:
         return None
     
-    if aug_count < 41:
+    if aug_count < 42:
         if file1[0] == 'P':
             return None 
     else: 
@@ -74,11 +75,11 @@ def perform_mixup_on_random_files(directory, alpha=1.0):
     return mixed_img
 
 train_path = "./preprocessed_data/image/train"
-aug_count = 0
-# test_path = "./preprocessed_data/tabular/test"
 
-while aug_count < 81:
-    mixed_x = perform_mixup_on_random_files(train_path, alpha=1.0)
-    if mixed_x != None:
-        aug_count +=1
+for p in range(4):
+    aug_count = 0
+    while aug_count < 83:
+        mixed_x = perform_mixup_on_random_files(train_path, alpha=1.0)
+        if mixed_x != None:
+            aug_count +=1
 
