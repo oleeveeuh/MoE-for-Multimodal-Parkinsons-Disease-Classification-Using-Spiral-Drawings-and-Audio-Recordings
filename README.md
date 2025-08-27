@@ -52,9 +52,7 @@ MixUp is applied to 2 randomly selected, with replacement, samples of the same c
 We repeat this until the original training set is balanced doubled. The process is then rerun with a augmented sample from the **MixUp_2_files** directory and an original file, essentially mixing 3 files. Finally, it is run on the **MixUp_3_files** directory. This results in a training dataset more than 4x its original size, with 160 samples with an even class distribution. 
 
 ### Image
-MixUp was also applied to the image data
-
-We were initially skeptical of applying MixUp to the image data as this resulted in two spirals in one image, so we opted to also include commonly used geometric transforms, such as resize, color jitter, stretch, and horizontal and vertical flipping. Interestingly, MixUp and geometric augmentations performed very similarly (around 92-93\%) accuracy when used to double the training set, with MixUp taking the edge. Therefore, we speculate that MixUp may be a viable method despite the single-line nature of our spiral images. 
+MixUp was also applied to the image data, with each point representing a coordinate or pixel of the image rather than a timestamp.We were initially skeptical of applying MixUp to the image data as this resulted in two spirals in one image, so we opted to also include commonly used geometric transforms, such as resize, color jitter, stretch, and horizontal and vertical flipping. Interestingly, MixUp and geometric augmentations performed very similarly (around 92-93\%) accuracy when used to double the training set, with MixUp taking the edge. Therefore, we speculate that MixUp may be a viable method despite the single-line nature of our spiral images. 
 
 For each image in the training set, we applied 1, 2, then 3 augmentations and saved the augmented copies. No class balancing is required. After experimenting with different augmentations available and number of variations to produce, we found that generating 3 variations of the original image with 1, 2, and 3 randomly chosen augmentations from color jitter, horizontal flip, and vertical flip yielded the best results. After augmentation, our training dataset is 4x its original size, with 244 samples in total.
 
@@ -62,7 +60,9 @@ For each image in the training set, we applied 1, 2, then 3 augmentations and sa
 For each recording in the training set, we randomly selected 3 of 4 augmentations (Add Gaussian Noise, Pitch Shift, Time Stretch, Gain) and applied each separately, saving the 3 augmented versions. We do not apply multiple augmentations due to the nature of the recordings, hoping to preserve any subtle tremors captured. After augmentation, our training dataset is 4x its original size, with 256 samples in total.
 
 ## Mixture of Experts with Routing Layer
-Our inspiration was drawn from DAMEX 
+![Diagram](images/diagram.png)
+
+A brief diagram of the MoE architecture is shown above. Our inspiration was drawn from [DAMEX](). DAMEX uses hard-routing, in which each expert is assigned a unique modality, with effectively  one expert specializing in each modality. We also tried soft-routing, in which inputs can be given to any expert regardless of modality. 
 
 ## Model Evaluation
 
