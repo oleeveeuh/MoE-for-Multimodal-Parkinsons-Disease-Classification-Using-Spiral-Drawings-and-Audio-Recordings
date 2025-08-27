@@ -33,12 +33,12 @@ Each audio file is resampled to 16KHz for the later feature extraction step, and
 
 
 ## Data Augmentation
-Data augmentation is applied to address class imbalances and increase the size of our training data. Because our datasets are so limited, this step is crucial to increasing the diversity and generalizability of the data. 
+Data augmentation is applied to address class imbalances and increase the size of our training data. Because our datasets are so limited, this step is crucial to increasing the diversity and generalizability of the data. All augmented data is included in the _augmented_data_ directory, and modality-specific steps are detailed below.
 
 ### Tabular
 After splitting, our training group consists of 20 PD and 12 control samples.  To address class imbalance, we apply oversampling to the control group during data augmentation to achieve a balanced distribution.
 
-**MixUp** augmentation is performed on randomly selected files of the same class [See full paper here]{mixup}. MixUp combines data from two different samples using this equation:
+**MixUp** augmentation is performed on randomly selected files of the same class [See original paper here](https://arxiv.org/pdf/1710.09412). MixUp combines data from two different samples using this equation:
 **<pre> x̃ = λxᵢ + (1 − λ)xⱼ  </pre>**
 
 where **$\tilde{x}$** is the resulting mixed data, **$(x_i, y_i)$** and **$(x_j , y_j)$** are data of two samples from our training group, and **$\lambda$** is a randomly sampled float within [0, 1]. Due to our class constrained approach, the **$y_i$** and **$y_j$** values remain the same.
@@ -59,13 +59,15 @@ For each recording in the training set, we randomly selected 3 of 4 augmentation
 
 ## Mixture of Experts with Routing Layer
 Our inspiration was drawn from DAMEX 
+
 ## Model Evaluation
 
-## Future Works
 
+## Future Works
+Our main priority is first improving accuracy of our current pipeline by modifying each modality's processing, as necessary. We aim to push all variations of multimodal models, receiving 2, then all 3 modalities as input, to comparable performnce as seen in previous literature. In the futher future, we also want to implement DeepSeekMoEs to merge our current approach with LLMs.
 
 # Manuscript Status
-
+The paper detailing the project's background, previous works, methodology, experimental results, etc. is being drafted. For a full list of references and/or questions, please contact the author at oliau@usc.edu.
 
 # Data Provenance and Availability
 All datasets used were accessed from public databases. 
@@ -85,13 +87,28 @@ The [audio dataset](https://figshare.com/articles/dataset/Voice_Samples_for_Pati
 
 
 # Quickstart Guide
-## Requirements
+## Requirements (Subject to Change)
+audiomentations       0.42.0
+Brotli                1.1.0
+colorama              0.4.6
+conda-libmamba-solver 25.3.0
+h2                    4.2.0
+nn                    0.1.1
+opencv-python         4.12.0.88
+pip-autoremove        0.10.0
+PySocks               1.7.1
+scikit-image          0.25.2
+seaborn               0.13.2
+torchaudio            2.7.1
+torchvision           0.22.1
+transformers          4.54.0
 
-# Manuscript Status
+# Running the Code
+Currently, the code is very unrefined and very segmented. A master program will be written once all pipelines are finalized. The MoE model can be run directly as all input data is included. 
+However, if needed for replication purposes, each modality's steps are organized into separate files with names corresponding to the step executed. 
 
 # Acknowledgements
-
-This work was conucted as part of the University of Wyoming's HUMANS MOVE: NSF REU Site.
+This work was conucted as part of the University of Wyoming's HUMANS MOVE: NSF REU Site, under the mentorship of Dr. Shivanand Sheshappanavar.
 
 
 
