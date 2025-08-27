@@ -19,6 +19,10 @@ This study focuses on the latter methods and attempts to expand upon previous de
 
 It is recommended to be familiarized with the datasets in [Data Provenance and Availability](#data-provenance-and-availability) before reviewing the methodology.
 
+![Pipeline](images/pipeline.png)
+
+Detailed information about each step can be found below. 
+
 ## Data Preprocessing
 After their respective preprocessing, each dataset is then split into 70/30 train/test groups. We use a set random seed for reproducability.
 
