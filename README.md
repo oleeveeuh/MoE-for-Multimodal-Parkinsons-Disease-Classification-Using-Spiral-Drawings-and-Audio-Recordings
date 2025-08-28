@@ -5,7 +5,7 @@ In addition to the condition lacking a cure, it is also difficult to diagnose du
 
 Among the many forms of diagnosis, this project aims to further leverage non-invasive modalities - **spiral drawings and audio recordings** - to detect PD, as compared to similar CV methods using MRI and PET scans.
 However, the relevant datasets available comprise very small sample sizes, complicating data variability and generalizability.
-To combat the issue(s) of limited datasets, misalignment between modalities, and missing patient information, I demonstrate the usefulness of a multimodal classification model using a pipeline comprising dataset-dependent feature extraction and a dataset-aware Mixture of Experts (MoE) model. 
+To combat the issue(s) of limited datasets, misalignment between modalities/dataset sizes, and missing patient information, I demonstrate the usefulness of a multimodal classification model using a pipeline comprising dataset-dependent feature extraction and a dataset-aware Mixture of Experts (MoE) model. 
 The architecture boasts its robustness by being able to make a prediction given any combination of modalities, and generalizability
 
 The key goal is to answer the following research questions:
@@ -60,7 +60,7 @@ For each image in the training set, I applied 1, 2, then 3 augmentations and sav
 For each recording in the training set, I randomly selected 3 of 4 augmentations (Add Gaussian Noise, Pitch Shift, Time Stretch, Gain) and applied each separately, saving the 3 augmented versions. I do not apply multiple augmentations due to the nature of the recordings, hoping to preserve any subtle tremors captured. After augmentation, our training dataset is 4x its original size, with 256 samples in total.
 
 ## Feature Extraction
-This step describes the process during which the original data is compressed into a smaller dimensionality by an encoder, representing its most meaningful 'features' so that our final classification model can learn more effectively. I use a combination of pre- and post-trained models depending on the modality, but all data is encoded to 192 latent (extracted) features. 
+This step describes the process during which the original data is compressed into a smaller dimensionality by an encoder, representing its most meaningful 'features' so that our final classification model can learn more effectively. I use a combination of pre- and post-trained models depending on the modality, but all data is encoded to 192 latent (extracted) features. Other works have found success with manually deriving features, such as calculating the radial velocity of a spiral drawing, but I place emphasis on automated feature extraction via deep neural networks.
 
 ### Tabular
 Due to the sequential nature of the timestamped data points, a positionally-encoded Transformer was deployed. During training, I found that loss stopped decreasing after around 14 epochs at around 0.16, so the Transformer's weights at that point were saved. This loss value is highly sub-optimal. I believe that this method would have done substantially better had it been trained for many more epochs, but computation expenses and time must be considered as constraints. 
@@ -69,22 +69,32 @@ Due to the sequential nature of the timestamped data points, a positionally-enco
 The pretrained ResNet-50 model was used in a previous work and showed very impressive performance, so I mirrored their methodology - for continuity and lack of need for revision. No further finetuning was performed on the spiral images. 
 
 ### Audio
-3 pretrained audio-processing models - wav2vec 2.0, HuBERT, and WavLM - were each tested No further finetuning was performed on the spiral images. 
+3 pretrained audio-processing models - wav2vec 2.0, HuBERT, and WavLM - were each tested due to the lack of concrete testing on sustaned vowel noises and learned features, hoping to yield insights into their performances for classification tasks. No further finetuning was performed on the training data. 
 
 
 ## Mixture of Experts with Routing Layer
-![Diagram](images/diagram.png)
+![MoE](images/moe.png)
 
-A brief diagram of the MoE architecture is shown above. Our inspiration was drawn from [DAMEX](). DAMEX uses hard-routing, in which each expert is assigned a unique modality, with effectively  one expert specializing in each modality. I also tried soft-routing, in which inputs can be given to any expert regardless of modality. 
+A brief diagram of the MoE architecture is shown above. Our inspiration was drawn from Dataset[DAMEX](). DAMEX uses hard-routing, in which each expert is assigned a unique modality, with effectively one expert specializing in each modality. I sought to expand their approach by modifying the hard-routing layer to soft-routing, in which inputs can be given to any expert regardless of modality. With this setup, I am able to alter the ratio of experts  to modalities; for instance, experimenting with 1 shared expert for all modalities (1:3), multiple experts per modality (experts>modalities, k=1), or experts specializing in multiple modalities (experts>modalities, k>1).
 
 ## Model Evaluation
+Models are trained for 200 epochs, with fast-stopping enabled to stop training if loss continuously fails to decrease. I chose this cap becaue performance tended to cap before 200 epochs was reached, regardless of training conditions. Finally, the trained model is saved and run on the test set. It is evaluated on accuracy, F1 score, precision, and recall. Afterwards, a confusion matrix is generated per modality to show where classification succeeded or failed. 
+
+# Results (As of 8/2/25)
+![barchart](images/bar_chart.png)
+![heatmap](images/heatmap.png)
 
 
-## Discussion and Future Works
-Being the only modality in which a post-trained encoder was used, our results demonstrate the upsides of importing 
+# Discussion and Future Works
+Our main priority is first improving accuracy of our current pipeline by modifying each modality's processing, as necessary. I aim to push all variations of multimodal models, receiving 2, then all 3 modalities as input, to comparable performnce as seen in previous literature. 
+Major areas of concern:
+1. As previously discussed, training the Transformer from scratch failed to achieve the desired loss with reasonable computation resources and time. Being the only modality in which a post-trained encoder was used, our results demonstrate the upsides - and perhaps necessity - of importing pretrained models.
+- Future Solution: MultiRocket (an adaptation of MiniRocket) applies random convolutional kernels to multiple channels to extract features. This method is deterministic and very efficient, as well as suitable for multivariate time series.
 
+2. None of the 3 audio feature extractors showed notably better performance than the others, and none performed satisfactorily.
+- Future Solution: I will investigate potential flaws in the preceding preprocessing and augmentation steps; perhaps my focus on preserving the original structures within the recordings was counterproductive. 
 
-Our main priority is first improving accuracy of our current pipeline by modifying each modality's processing, as necessary. I aim to push all variations of multimodal models, receiving 2, then all 3 modalities as input, to comparable performnce as seen in previous literature. In the futher future, I also want to implement DeepSeekMoEs to merge our current approach with LLMs.
+In the futher future, I also want to implement DeepSeekMoEs to merge the current approach with MoE LLMs. In the context of commercialization, this will provide explainability, as well as improve scale and efficiency.
 
 # Manuscript Status
 The paper detailing the project's background, previous works, methodology, experimental results, etc. is being drafted. For a full list of references and/or questions, please contact the author at oliau@usc.edu.
@@ -107,7 +117,7 @@ The [audio dataset](https://figshare.com/articles/dataset/Voice_Samples_for_Pati
 
 
 # Quickstart Guide
-## Requirements (Subject to Change)
+## Requirements (As of 8/2/25, Subject to Change)
 audiomentations       0.42.0
 Brotli                1.1.0
 colorama              0.4.6
@@ -128,7 +138,7 @@ Currently, the code is very unrefined and very segmented. A master program will 
 However, if needed for replication purposes, each modality's steps are organized into separate files with names corresponding to the step executed. 
 
 # Acknowledgements
-This work was conucted as part of the University of Wyoming's HUMANS MOVE: NSF REU Site, under the mentorship of Dr. Shivanand Sheshappanavar.
+This work was conducted as part of the University of Wyoming's HUMANS MOVE: NSF REU Site, under the mentorship of Dr. Shivanand Sheshappanavar.
 
 
 
