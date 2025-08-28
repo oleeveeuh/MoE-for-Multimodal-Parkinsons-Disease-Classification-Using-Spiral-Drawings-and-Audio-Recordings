@@ -9,7 +9,6 @@ import numpy as np
 from torch.nn.utils.rnn import pad_sequence
 import gc
 
-
 def collate_fn(batch):
     """
     batch: list of (features_tensor, label)

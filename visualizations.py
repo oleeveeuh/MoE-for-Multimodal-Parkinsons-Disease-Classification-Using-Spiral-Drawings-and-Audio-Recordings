@@ -52,8 +52,6 @@ def plot_bars():
 
 
 def plot_heatmap():
-# Create DataFrame
-
     modality_combinations = [
         'Tabular', 
         'Image',
@@ -64,7 +62,7 @@ def plot_heatmap():
         'All Modalities'
     ]
     data = {
-        'accuracy' : [.9488, 0.9784, 0.9140, 0.9704, 0.9491, .9638, .9550],
+        'Accuracy' : [.625, 0.9524, 0.7647, 0.8966, 0.7922, .8947, .8043],
         # 'f1_score' : [0.9490, 0.9783, 0.9133, 0.9704, 0.9491, .9638, .9550],
         # 'precision' : [0.9522, 0.9792, 0.9217, 0.9706, 0.9530, .9642, .9557],
         # 'recall' : [0.9488, 0.9784, 0.9140, 0.9704, 0.9491, .9638, .9550],
@@ -77,7 +75,7 @@ def plot_heatmap():
     # Plot heatmap
     plt.figure(figsize=(8, 6),  facecolor = '#fffcf1ff')
 
-    sns.heatmap(df, annot=True, cmap="YlGnBu", cbar=True, vmin=.6, vmax=1, linewidths=0.5, linecolor='gray')
+    sns.heatmap(df, annot=True, cmap="YlGnBu", cbar=True, vmin=.6, vmax=1, linewidths=0.5, linecolor='gray', fmt=".3f")
     plt.title("Model Performance Across Modality Combinations")
     plt.ylabel("Modality")
     plt.xlabel("Metric")

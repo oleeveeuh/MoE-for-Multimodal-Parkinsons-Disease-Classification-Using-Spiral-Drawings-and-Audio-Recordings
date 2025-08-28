@@ -15,6 +15,7 @@ from itertools import product
 import random
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
+#Set seeds for reproducibility
 seed = 42  
 torch.manual_seed(seed)
 random.seed(seed)
@@ -24,42 +25,42 @@ np.random.seed(seed)
 # parser.add_argument('--datasets', nargs='+', required=True, help='List of dataset names')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+# Define datasets to be passed as input (comment out as needed)
 datasets = [
-    'tabular',
+    # 'tabular',
     'image',
     'audio',
 ]
-def evaluate_metrics(model, dataloader, device):
+
+def evaluate_metrics(model, dataloader, device, test=False):
     preds_per_source = defaultdict(list)
     labels_per_source = defaultdict(list)
     model.eval()
     all_preds, all_labels = [], []
     with torch.no_grad():
-        for x, y, _ in dataloader:
+        for x, y, src_batch in dataloader:
             x, y = x.to(device), y.to(device)
             logits, _ = model(x)
             preds = torch.argmax(logits, dim=1)
             all_preds.append(preds.cpu())
             all_labels.append(y.cpu())
 
-            for pred, label, src in zip(preds, y, source_ids):
+            for pred, label, src in zip(preds, y, src_batch):
                 src = int(src.item())
                 preds_per_source[src].append(pred.item())
                 labels_per_source[src].append(label.item())
 
     # Plot confusion matrices per source
-    # for src in sorted(preds_per_source.keys()):
-    #     y_true = labels_per_source[src]
-    #     y_pred = preds_per_source[src]
+    if test:
+        for src in sorted(preds_per_source.keys()):
+            y_true = labels_per_source[src]
+            y_pred = preds_per_source[src]
 
-    #     cm = confusion_matrix(y_true, y_pred)
-    #     disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-    #     disp.plot(cmap=plt.cm.Blues)
-    #     plt.title(f"Confusion Matrix for Source {src}")
-    #     plt.show()
-
-        # acc = accuracy_score(y_true, y_pred)
-        # print(f"📊 Source {src} Accuracy: {acc:.4f}")
+            cm = confusion_matrix(y_true, y_pred)
+            disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+            disp.plot(cmap=plt.cm.Blues)
+            plt.title(f"Confusion Matrix for Source {src}")
+            plt.show()
 
     y_pred = torch.cat(all_preds).numpy()
     y_true = torch.cat(all_labels).numpy()
@@ -69,8 +70,17 @@ def evaluate_metrics(model, dataloader, device):
     print(f"Accuracy: {acc:.4f} | Precision: {precision:.4f} | Recall: {recall:.4f} | F1 Score: {f1:.4f}")
     return acc, precision, recall, f1
 
-# Get all predictions and true labels on test set
 def get_preds_and_labels(model, dataloader, device):
+    """
+    Get all predictions and true labels on test set for confusion matrix generation.
+
+    Parameters:
+    model (MoEClassifier): The saved model, trained on the training  dataset.
+
+    Returns:
+    all_preds (numpy array): Model's predictions (PD or H).
+    all_labels (numpy array): Actual ground truth labels.
+    """
     model.eval()
     all_preds = []
     all_labels = []
@@ -82,7 +92,6 @@ def get_preds_and_labels(model, dataloader, device):
             all_preds.append(preds.cpu())
             all_labels.append(y)
     return torch.cat(all_preds).numpy(), torch.cat(all_labels).numpy()
-
 
 class MoELayer(nn.Module):
     def __init__(self, input_dim, expert_dim, num_experts, k=1, gate_noise_std=1.0):
@@ -208,7 +217,6 @@ all_results = []
 source_id = 0
 criterion = nn.CrossEntropyLoss()
 
-   
 for d in datasets:
     feat_path = f"./encoders/encoded/best/{d}/train_features.csv"
     label_path = f"./encoders/encoded/best/{d}/train_labels.csv"
@@ -245,10 +253,8 @@ test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16)
 kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
 # plot training loss
-
-
 for num_experts, k in product(num_experts_list, k_list):
-    print(f"\n🧪 Testing num_experts = {num_experts}, k = {k}")
+    print(f"\nTesting num_experts = {num_experts}, k = {k}")
     all_results = []
     best_model = None
     best_acc = 0
@@ -309,8 +315,9 @@ for num_experts, k in product(num_experts_list, k_list):
 
     model.load_state_dict(torch.load('best_model.pt'))
 
-    print("📊 Evaluating on TEST set:")
-    test_acc, test_precision, test_recall, test_f1 = evaluate_metrics(model, test_loader, device)
+    print("Evaluating on test set:")
+    test_acc, test_precision, test_recall, test_f1 = evaluate_metrics(model, test_loader, device, test=True)
+
 
     # Get preds and true labels
     test_preds, test_labels = get_preds_and_labels(model, test_loader, device)
