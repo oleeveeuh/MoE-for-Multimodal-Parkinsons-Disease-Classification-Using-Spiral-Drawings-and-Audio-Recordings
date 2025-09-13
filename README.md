@@ -1,11 +1,11 @@
 # Project Overview
 
-Parkinson's Disease (PD) is a prevalent neurodegenerative disorder affecting approximately  (percent) of adults nationwide, with its main symptoms being tremor, bradykinesia, etc. 
+Parkinson's Disease (PD) is a prevalent neurodegenerative disorder affecting approximately 67 percent of adults nationwide, with its main symptoms being tremor, bradykinesia, etc. 
 In addition to the condition lacking a cure, it is also difficult to diagnose during its early progression, commonly confused with similar parkinsonian disorders up into its final stages. 
 
 Among the many forms of diagnosis, this project aims to further leverage non-invasive modalities - **spiral drawings and audio recordings** - to detect PD, as compared to similar CV methods using MRI and PET scans.
 However, the relevant datasets available comprise very small sample sizes, complicating data variability and generalizability.
-To combat the issue(s) of limited datasets, misalignment between modalities/dataset sizes, and missing patient information, I demonstrate the usefulness of a multimodal classification model using a pipeline comprising dataset-dependent feature extraction and a dataset-aware Mixture of Experts (MoE) model. 
+To combat the issue(s) of limited datasets, misalignment between modalities/dataset sizes, and missing patient information, I demonstrate the usefulness of a multimodal classification model using a pipeline comprising **dataset-dependent feature extraction** and a **dataset-aware Mixture of Experts (MoE)** model. 
 The architecture boasts its robustness by being able to make a prediction given any combination of modalities, and generalizability
 
 The key goal is to answer the following research questions:
@@ -13,6 +13,12 @@ The key goal is to answer the following research questions:
 - Can machine-learning be leveraged to accurately diagnose PD using only non-invasive data collection methods?
 - Can data augmentation and Mixture of Experts address the issues of limited sample sizes and disjoint datasets?
 - How can I define optimally performing pipelines tailored to each modality? Can our model achieve good performance even if one modality is lacking?
+
+Main Libraries Used:
+- PyTorch (torchaudio and torchvision)
+- scikit-learn
+- openCV
+- Tranformers (Hugging Face)
 
 # Pipeline Overview
 This study focuses on the latter methods and attempts to expand upon previous deep-learning feature extraction utilizing spiral drawings and audio recordings. I do so by devising a model architecture with a Mixture of Experts (MoE) layer that is compatible with multiple datasets of distinct modalities. I also draw upon and review previous literature's model training pipelines comprising data preprocessing, data augmentation, and feature extraction per modality. Finally, I compare our model's performance on all input combinations with the current state-of-the-art. Our methodology allows versatility with model inputs and creates a well-rounded, comprehensive model for PD classification.
